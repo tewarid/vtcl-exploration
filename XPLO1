@@ -1,0 +1,1442 @@
+#!/bin/vtcl
+
+#************************
+# declare a few global variables for future usage
+#************************
+#
+set temp1 " "
+set temp2 " "
+set temp3 " "
+set temp4 " "
+set temp5 " "
+set browse " "
+
+proc bCB {cbs} {
+	global textBox
+	VtSetValues $textBox -value "Hello"
+}
+
+#*******************
+# return filename of selected item in drawnList widget
+#*******************
+#
+proc getFile {} {
+	global dlist
+	set item [VtDrawnListGetSelectedItem $dlist ]
+	set filerec [VtDrawnListGetItem $dlist -position $item ]
+	set splitrec [split $filerec " "]
+	set splitfilename [lindex $splitrec 1]
+	set len [clength $splitfilename]
+	set decrlen [ expr $len - 1 ]
+	set filename [csubstr $splitfilename 0 $decrlen]
+	return $filename
+}
+
+#**************************
+# proc getPath returns the current path in explorer by execing pwd command
+#**************************
+#
+proc getPath {} {
+	set path [exec pwd]
+	if { $path != "/" } {
+		return "$path/"
+	} else {
+		return "/"
+		}
+}
+
+#************************
+# proc getPerm is used to obtain the permissions of selected item in 
+# the drawnlist
+#************************
+#
+proc getPerm {} {
+	global dlist
+	set lst [exec ls]
+	set maxl [llength $lst]
+	set longlisting [exec l]
+	set reclist [split $longlisting "\n"]
+	set counter 0
+	set item [VtDrawnListGetSelectedItem $dlist ]
+	set ditem [ expr ( $item - 2 ) ]
+	while { [ expr ( $counter < $maxl ) ] }\
+	{                        
+		set item [lindex $lst $counter]
+		set fieldcount [expr $counter + 1 ] 
+		set recfield [lindex $reclist $fieldcount]
+		set permission [lindex $recfield 0]
+		lappend permlist $permission
+		set counter [incr counter]
+	}
+	set permission [lindex $permlist $ditem]
+	return $permission
+}
+
+#*******************
+# drawnListAddItem procedure -- read the contents of the present
+# working directory and populate the drawnlist widget.
+#*******************
+#
+proc drawnListAddItem {parent} {
+	global textbox
+	set lst [exec ls]
+	set maxl [llength $lst]
+	set longlisting [exec l]
+	set reclist [split $longlisting "\n"]
+
+# do not display up_arrow if in root directory        
+#
+	set path [exec pwd]
+	if { $path != "/" } {
+		VtDrawnListAddItem $parent\
+			-formatList { {ICON 1 5 5} {STRING 30} }\
+			-fieldList [list 0 ".."]
+	}
+	
+	set counter 0
+	while { [ expr ( $counter < $maxl ) ] }\
+	{                        
+		set item [lindex $lst $counter]
+		set fieldcount [expr $counter + 1 ] 
+# parse the long file listing to obtain the file permissions and to neglect
+# the 'total' field in it
+#
+		set recfield [lindex $reclist $fieldcount]
+		set permission [lindex $recfield 0]
+
+# get file permissions and select suitable icon
+#
+		set dirperm [csubstr $permission 0 1]
+		if { $dirperm != "d" } {
+			set execperm [csubstr $permission 3 1]
+			if { $execperm != "x" } {
+				set iconum 1
+			} else {
+			set iconum 2
+				}
+		} else { 
+			set iconum 3
+			}
+
+		VtDrawnListAddItem $parent\
+			-formatList { {ICON 1 5 5} {STRING 30} }\
+			-fieldList [ list $iconum  $item ]
+		set counter [incr counter]
+	}
+# if in root up_arrow is not displayed so the selected item can be the very
+# first item of the drawnlist
+#
+	if { $path != "/" } {
+# catch is used to prevent termination due to error in the event that the                
+# drawnList is devoid of any item
+#
+		catch {VtDrawnListSelectItem $parent -position 2}
+	} else {
+		catch {VtDrawnListSelectItem $parent -position 1}
+		}
+	set filename [getFile]
+	set path [getPath]
+	VtSetValues $textbox -value "$path$filename"
+}
+
+#**********************
+# cancelCB called to stop a particular option selected by user
+#**********************
+#
+proc cancelCB {cbs} {
+	global temp1 
+	VtDestroyDialog $temp1
+}
+
+#************************
+# quickeditCB: from tool3 launches scoedit to edit selected file in drawnlist
+#************************
+#
+proc quickeditCB {cbs} {
+	set filename [getFile]
+	exec scoedit $filename &
+}
+
+#***********************
+# proc editFileCB: callback from proc editCB, parent: formdialog temp1
+#***********************
+#
+proc editFileCB {cbs} {
+	global temp1 temp2
+	set filename [VtGetValues $temp2 -value]
+	VtDestroyDialog $temp1
+	exec scoedit $filename &
+}
+
+#***********************
+# implement the file selection dialog to browse for a file name
+# once the file is found the text box temp2 is updated.
+#***********************
+#
+proc getselFileCB {cbs} {
+	global browse temp2
+	set browse [keylget cbs value]
+	VtSetValues $temp2 -value $browse
+}
+
+proc browseCB {cbs} {
+	global temp1
+	set path [getPath]
+	set filename [getFile]
+	set selectionDialog [VtFileSelectionDialog $temp1.browse\
+				-dirListLabel "Directories:"\
+				-fileListLabel "File(s):"\
+				-filter "$path*"\
+				-filterLabel "Filter:"\
+				-selection "$filename"\
+				-selectionLabel "File name:"\
+				-okCallback getselFileCB]
+	VtShow $selectionDialog
+}
+
+#***********************
+# proc editCB callback from edit option pushbutton of files menu.
+#***********************
+#
+proc editCB {cbs} {
+	global temp1 temp2 form filename
+# facilitate change of filename        
+#
+	set temp1 [VtFormDialog $form.editf \
+				-title "Get File To Edit"\
+				-ok\
+				-cancel\
+				-okCallback editFileCB\
+				-cancelCallback cancelCB]
+	set path [getPath]
+	set filename [getFile]
+	set temp2 [VtText $temp1.text -value "$path$filename"\
+				-horizontalScrollBar TRUE\
+				-rightSide FORM\
+				-columns 30]
+	set browseB [VtPushButton $temp1.browseB -label "Browse..."\
+					 -callback browseCB\
+					 -topSide $temp2]
+	VtShow $temp1
+}
+
+proc charmCB {cbs} {
+	global form
+	set mesgd [VtErrorDialog $form.mesgd \
+			-message "Cannot execute this option in text mode"] 
+	VtShow $mesgd
+}
+	
+#**************************
+# proc execCB: from tool2 toolbar pushbutton to exec a file chosen in the 
+# drawnlist. 
+# Error catching is used to prevent errors from disrupting the application.
+#**************************
+#
+proc execCB {cbs} {
+	global form
+	set exeFileName [getFile]
+	set path [getPath]
+	set status [catch { exec "$path$exeFileName" } error]
+	if  { $status != "0" } {
+		set errormsg [VtErrorDialog $form.execerr -message $error]
+		VtShow $errormsg
+	}
+}
+
+#**********************
+# runFileCB called from formadialog temp1 in proc runCB
+#**********************
+#
+proc runFileCB {cbs} {
+	global temp1 temp2 form
+	set filename [VtGetValues $temp2 -value]
+	VtDestroyDialog $temp1
+	set status [catch {exec $filename} error]
+	if  { $status != "0" } {
+		set errormsg [VtErrorDialog $form.execerr -message $error] 
+		VtShow $errormsg
+	}
+}
+
+#***********************
+# proc runCB called from pushbutton run in pm1 (file) pulldown menu
+#***********************
+#
+proc runCB {cbs} {
+	global temp1 temp2 form
+	set temp1 [VtFormDialog $form.runf \
+				-title "Run"\
+				-ok\
+				-cancel\
+				-okCallback runFileCB\
+				-cancelCallback cancelCB]
+	set path [getPath]
+	set filename [getFile]
+	set temp2 [VtText $temp1.text -value "$path$filename"\
+				-horizontalScrollBar TRUE\
+				-columns 30]
+	VtShow $temp1
+}                               
+
+#********************
+# catFilesCB from formdialog temp1 of catCB procedure. exec cat command.
+#********************
+#
+proc catFilesCB {cbs} {
+	global temp1 temp2 temp3 temp4 form dlist
+	set src1 [VtGetValues $temp2 -value]
+	set src2 [VtGetValues $temp3 -value]
+	set dest [VtGetValues $temp4 -value]
+	VtDestroyDialog $temp1
+	set status [catch {exec cat $src1 $src2 > $dest } error]
+	if  { $status != "0" } {
+		set errormsg [VtErrorDialog $form.execerr -message $error]
+		VtShow $errormsg
+		return
+	}
+	VtDrawnListDeleteItem $dlist -all
+	drawnListAddItem $dlist
+}
+
+#********************
+# callback catCB from cat option pushbutton of pm1 (file) menu item
+#********************
+#
+proc catCB {cbs} {
+	global temp1 temp2 temp3 temp4 form
+	set temp1 [VtFormDialog $form.cat\
+				-title "Cat"\
+				-ok\
+				-cancel\
+				-okCallback catFilesCB\
+				-cancelCallback cancelCB]
+	set path [getPath]
+	set filename [getFile]
+	set temp2 [VtText $temp1.src1 -value "$path$filename"\
+				      -horizontalScrollBar TRUE\
+				      -columns 30\
+				      -rightSide FORM]
+	VtLabel $temp1.and -label "And"
+	set temp3 [VtText $temp1.src2 -value "$path"\
+				      -horizontalScrollBar TRUE\
+				      -columns 30\
+				      -rightSide FORM]
+	VtLabel $temp1.to -label "To"
+	set temp4 [VtText $temp1.dest -value "$path"\
+				      -horizontalScrollBar TRUE\
+				      -columns 30\
+				      -rightSide FORM]
+	VtShow $temp1
+}
+
+#********************
+# copyFileCB called from formdialog temp1 in copyCB procedure.
+#********************
+#
+proc copyFileCB {cbs} {
+	global temp1 temp2 temp3 dlist form
+	set src [VtGetValues $temp2 -value]
+	set dest [VtGetValues $temp3 -value]
+	VtDestroyDialog $temp1
+	set status [catch {exec cp $src $dest} error]
+	if  { $status != "0" } {
+		set errormsg [VtErrorDialog $form.execerr -message $error]
+		VtShow $errormsg
+		return
+	}
+	VtDrawnListDeleteItem $dlist -all
+	drawnListAddItem $dlist
+}
+
+#********************
+# callback copyCB from copy option pushbutton of pm1 (file) menu item
+#********************
+#
+proc copyCB {cbs} {
+	global temp1 temp2 temp3 form
+	set temp1 [VtFormDialog $form.copy\
+				-title "Copy"\
+				-ok\
+				-cancel\
+				-okCallback copyFileCB\
+				-cancelCallback cancelCB]
+	set path [getPath]
+	set filename [getFile]
+	set temp2 [VtText $temp1.src -value "$path$filename"\
+				      -horizontalScrollBar TRUE\
+				      -columns 30]
+	VtLabel $temp1.to -label "To"
+	set temp3 [VtText $temp1.dest -value "$path"\
+				      -horizontalScrollBar TRUE\
+				      -columns 30]
+	VtShow $temp1
+}
+
+#**********************
+# renameFileCB called by renameCB as callback from the formdialog temp1
+#**********************
+#
+proc renameFileCB {cbs} {
+	global temp1 temp2 temp3 dlist form
+	set src [VtGetValues $temp2 -value]
+	set dest [VtGetValues $temp3 -value]
+# destroy formdialog temp1 and execute the mv command        
+#
+	VtDestroyDialog $temp1
+	set status [ catch {exec mv $src $dest} output]
+	if { $status != "0" } {
+		set errord [VtErrorDialog $form.errord -message $output]
+		VtShow $errord
+		return
+	}
+	VtDrawnListDeleteItem $dlist -all
+	drawnListAddItem $dlist
+}
+
+#***********************
+# renameCB called from rename pushbutton in pm1 (file) pulldown menu
+#***********************
+#
+proc renameCB {cbs} {
+	global temp1 temp2 temp3 form
+	set temp1 [VtFormDialog $form.rename\
+				-title "Rename"\
+				-ok\
+				-cancel\
+				-okCallback renameFileCB \
+				-cancelCallback cancelCB]
+	set path [getPath]
+	set filename [getFile]
+	set temp2 [VtText $temp1.first -value "$path$filename"\
+				-horizontalScrollBar TRUE\
+				-columns 30]
+	VtLabel $temp1.label -label "To"
+	set temp3 [VtText $temp1.second -value $path\
+					-horizontalScrollBar TRUE\
+					-columns 30]
+	VtShow $temp1
+}
+
+#**********************
+# deleteFileCB called from formdialog temp1 in deleteCB to exec rm command
+#**********************
+#
+proc deleteFileCB {cbs} {
+	global temp1 temp2 form dlist
+	set filename [VtGetValues $temp2 -value]
+# destroy formdialog temp1 and execute the rm command
+#
+	VtDestroyDialog $temp1
+	set status [catch {exec rm $filename } error]
+	if { $status != "0" } {
+		set errormsg [VtErrorDialog $form.execerr -message $error]
+		VtShow $errormsg
+	}
+# update drawnlist
+#
+	VtDrawnListDeleteItem $dlist -all
+	drawnListAddItem $dlist
+}
+
+#***********************
+# deleteCB called from pushbutton delete of pm1 (file) pulldown menu and 
+# tool4 toolbar item.
+#***********************
+#
+proc deleteCB {cbs} {
+	global temp1 temp2 form
+	set temp1 [VtFormDialog $form.delete \
+				-title "Delete ?"\
+				-ok\
+				-cancel\
+				-okCallback deleteFileCB \
+				-cancelCallback cancelCB]
+	set path [getPath]
+	set filename [getFile]
+	set temp2 [VtText $temp1.text\
+				-value "$path$filename"\
+				-columns 30]
+	VtShow $temp1
+}
+
+#********************
+# moveFileCB called from formdialog temp1 in moveCB procedure.
+#********************
+#
+proc moveFileCB {cbs} {
+	global temp1 temp2 temp3 dlist form
+	set src [VtGetValues $temp2 -value]
+	set dest [VtGetValues $temp3 -value]
+	VtDestroyDialog $temp1
+	set status [catch {exec mv $src $dest} error]
+	if  { $status != "0" } {
+		set errormsg [VtErrorDialog $form.execerr\
+						-message $error]
+		VtShow $errormsg
+	}
+	VtDrawnListDeleteItem $dlist -all
+	drawnListAddItem $dlist
+}
+
+#********************
+# callback moveCB from move option pushbutton of pm1 (file) menu item
+#********************
+#
+proc moveCB {cbs} {
+	global temp1 temp2 temp3 form
+	set temp1 [VtFormDialog $form.move\
+				-title "Move"\
+				-ok\
+				-cancel\
+				-okCallback moveFileCB\
+				-cancelCallback cancelCB]
+	set path [getPath]
+	set filename [getFile]
+	set temp2 [VtText $temp1.src -value "$path$filename" \
+				      -horizontalScrollBar TRUE\
+				      -columns 30]
+	VtLabel $temp1.to -label "To"
+	set temp3 [VtText $temp1.dest -value "$path" \
+				      -horizontalScrollBar TRUE\
+				      -columns 30]
+	VtShow $temp1
+}
+
+#*********************
+# given below are a group of nine callback procedures referenced by
+# permCB procedure toggle buttons to change file permissions
+#*********************
+#
+proc urCB {cbs} {
+	set parentButton [keylget cbs widget]
+	set urp [keylget cbs value]
+	set path [getPath]
+	set filename [getFile]
+	if { $urp != "1" } {
+		catch {exec chmod u-r "$path$filename"} 
+	} else { catch {exec chmod u+r "$path$filename"} }
+}
+
+proc uwCB {cbs} {
+	set parentButton [keylget cbs widget]
+	set uwp [keylget cbs value]
+	set path [getPath]
+	set filename [getFile]
+	if { $uwp != "1" } {
+		catch {exec chmod u-w "$path$filename"} 
+	} else { catch {exec chmod u+w "$path$filename"} }
+}
+
+proc ueCB {cbs} {
+	set parentButton [keylget cbs widget]
+	set uep [keylget cbs value]
+	set path [getPath]
+	set filename [getFile]
+	if { $uep != "1" } {
+		catch {exec chmod u-x "$path$filename"} 
+	} else { catch {exec chmod u+x "$path$filename"} }
+}
+
+proc grCB {cbs} {
+	set parentButton [keylget cbs widget]
+	set grp [keylget cbs value]
+	set path [getPath]
+	set filename [getFile]
+	if { $grp != "1" } {
+		catch {exec chmod g-r "$path$filename"} 
+	} else { catch {exec chmod g+r "$path$filename"} }
+}
+
+proc gwCB {cbs} {
+	set parentButton [keylget cbs widget]
+	set gwp [keylget cbs value]
+	set path [getPath]
+	set filename [getFile]
+	if { $gwp != "1" } {
+		catch {exec chmod g-w "$path$filename"} 
+	} else { catch {exec chmod g+w "$path$filename"} }
+}
+
+proc geCB {cbs} {
+	set parentButton [keylget cbs widget]
+	set gep [keylget cbs value]
+	set path [getPath]
+	set filename [getFile]
+	if { $gep != "1" } {
+		catch {exec chmod g-x "$path$filename"} 
+	} else { catch {exec chmod g+x "$path$filename"} }
+}
+
+proc orCB {cbs} {
+	set parentButton [keylget cbs widget]
+	set orp [keylget cbs value]
+	set path [getPath]
+	set filename [getFile]
+	if { $orp != "1" } {
+		catch {exec chmod o-r "$path$filename"} 
+	} else { catch {exec chmod o+r "$path$filename"} }
+}
+
+proc owCB {cbs} {
+	set parentButton [keylget cbs widget]
+	set owp [keylget cbs value]
+	set path [getPath]
+	set filename [getFile]
+	if { $owp != "1" } {
+		catch {exec chmod o-w "$path$filename"} 
+	} else { catch {exec chmod o+w "$path$filename"} }
+}
+
+proc oeCB {cbs} {
+	set parentButton [keylget cbs widget]
+	set oep [keylget cbs value]
+	set path [getPath]
+	set filename [getFile]
+	if { $oep != "1" } {
+		catch {exec chmod o-x "$path$filename"} 
+	} else { catch {exec chmod o+x "$path$filename"} }
+}
+
+proc refreshCB {cbs} {
+	global temp1 dlist
+	VtDestroyDialog $temp1
+	VtDrawnListDeleteItem $dlist -all
+	drawnListAddItem $dlist
+}
+
+#********************
+# callback permCB from perm option pushbutton of pm1 (file) menu item
+#********************
+#
+proc permCB {cbs} {
+	global temp1 form
+	set temp1 [VtFormDialog $form.perm\
+				-title "File Permissions"\
+				-wmDecoration {TITLE BORDER}\
+				-ok\
+				-okCallback refreshCB]
+	set path [getPath]
+	set filename [getFile]
+	set name [VtLabel $temp1.to -label "$path$filename"]
+	set perm [getPerm]
+	if { [csubstr $perm 1 1 ]!= "r" } {
+		set urp FALSE
+	} else { set urp TRUE }
+	if { [csubstr $perm 2 1] != "w" } {
+		set uwp FALSE
+	} else { set uwp TRUE }
+	if { [csubstr $perm 3 1] != "x" } {
+		set uep FALSE
+	} else { set uep TRUE }
+	if { [csubstr $perm 4 1 ]!= "r" } {
+		set grp FALSE
+	} else { set grp TRUE }
+	if { [csubstr $perm 5 1 ]!= "w" } {
+		set gwp FALSE
+	} else { set gwp TRUE }
+	if { [csubstr $perm 6 1] != "x" } {
+		set gep FALSE
+	} else { set gep TRUE }
+	if { [csubstr $perm 7 1] != "r" } {
+		set orp FALSE
+	} else { set orp TRUE }
+	if { [csubstr $perm 8 1] != "w" } {
+		set owp FALSE
+	} else { set owp TRUE }
+	if { [csubstr $perm 9 1] != "x" } {
+		set oep FALSE
+	} else { set oep TRUE }
+
+	set sep1 [VtSeparator $temp1.sep1 -horizontal\
+					-leftSide FORM\
+					-rightSide FORM]
+	set userl [VtLabel $temp1.userl -label "User"]
+	set sep2 [VtSeparator $temp1.sep2 -horizontal\
+					-leftSide FORM\
+					-rightSide 25]
+	set ur [VtToggleButton $temp1.ur\
+					-set $urp\
+					-label "read"\
+					-callback urCB]
+	set uw [VtToggleButton $temp1.uw\
+					-set $uwp\
+					-label "write"\
+					-callback uwCB\
+					-leftSide $ur\
+					-topSide $sep2]
+	set ue [VtToggleButton $temp1.ue\
+					-set $uep\
+					-label "execute"\
+					-callback ueCB\
+					-leftSide $uw\
+					-topSide $sep2]
+	set sep3 [VtSeparator $temp1.sep3 -horizontal\
+					-leftSide FORM\
+					-rightSide FORM]
+	set groupl [VtLabel $temp1.groupl -label "Group"]
+	set sep4 [VtSeparator $temp1.sep4 -horizontal\
+					-leftSide FORM\
+					-rightSide 25]
+	set gr [VtToggleButton $temp1.gr\
+					-set $grp\
+					-label "read"\
+					-callback grCB\
+					-topSide $sep4]
+	set gw [VtToggleButton $temp1.gw\
+					-set $gwp\
+					-label "write"\
+					-callback gwCB\
+					-leftSide $gr\
+					-topSide $sep4]
+	set ge [VtToggleButton $temp1.ge\
+					-set $gep\
+					-label "execute"\
+					-callback geCB\
+					-leftSide $gw\
+					-topSide $sep4]
+	set sep5 [VtSeparator $temp1.sep5 -horizontal\
+					-leftSide FORM\
+					-rightSide FORM]
+	set otherl [VtLabel $temp1.otherl -label "Others"]
+	set sep6 [VtSeparator $temp1.sep6 -horizontal\
+					-leftSide FORM\
+					-rightSide 25]
+	set or [VtToggleButton $temp1.or\
+					-set $orp\
+					-label "read"\
+					-callback orCB\
+					-topSide $sep6]
+	set ow [VtToggleButton $temp1.ow\
+					-set $owp\
+					-label "write"\
+					-callback owCB\
+					-topSide $sep6\
+					-leftSide $or]
+	set oe [VtToggleButton $temp1.oe\
+					-set $oep\
+					-label "execute"\
+					-callback oeCB\
+					-topSide $sep6\
+					-leftSide $ow]
+	VtShow $temp1
+}
+
+#*******************
+# homeCB from home pushbuttom in pm1 (file) pulldown menu
+#*******************
+#
+proc homeCB {cbs} {
+	global dlist
+	cd
+	VtDrawnListDeleteItem $dlist -all
+	drawnListAddItem $dlist
+}
+
+#********************
+# execmkdirCB called from formdialog temp1 of mkdirCB procedure
+#********************
+#
+proc execmkdirCB {cbs} {
+	global temp1 temp2 dlist form
+	set directory [VtGetValues $temp2 -value]
+	VtDestroyDialog $temp1
+	set status [catch {exec mkdir $directory} error]
+	if  { $status != "0" } {
+		set errormsg [VtErrorDialog $form.execerr\
+						-message $error]
+		VtShow $errormsg
+		return
+	}
+	VtDrawnListDeleteItem $dlist -all
+	drawnListAddItem $dlist
+}
+
+#********************
+# callback mkdirCB from md option pushbutton of pm1 (file) menu item
+#********************
+#
+proc mkdirCB {cbs} {
+	global temp1 temp2 form
+	set temp1 [VtFormDialog $form.mkdir\
+				-title "Create Directory"\
+				-ok\
+				-cancel\
+				-okCallback execmkdirCB\
+				-cancelCallback cancelCB]
+	set name [VtLabel $temp1.to -label "Name"]
+	set path [getPath]
+	set temp2 [VtText $temp1.src -value "$path"\
+				     -leftSide $name\
+				     -rightSide FORM\
+				     -horizontalScrollBar TRUE\
+				     -columns 30]
+	VtShow $temp1
+}
+
+proc execrmdirCB {cbs} {
+	global temp1 temp2 form dlist
+	set filename [VtGetValues $temp2 -value]
+	VtDestroyDialog $temp1
+	set status [ catch { exec rmdir $filename} output ]
+	if { $status != "0" } {
+		set errord [VtErrorDialog $form.ed -message $output]
+		VtShow $errord
+		return
+	}
+	VtDrawnListDeleteItem $dlist -all
+	drawnListAddItem $dlist
+}
+	
+proc rmdirCB {cbs} {
+	global temp1 temp2 form
+	set temp1 [VtFormDialog $form.rmdir\
+				-title "Remove Directory"\
+				-ok\
+				-cancel\
+				-okCallback execrmdirCB\
+				-cancelCallback cancelCB]
+	set name [VtLabel $temp1.to -label "Name"]
+	set path [getPath]
+	set filename [getFile]
+	set temp2 [VtText $temp1.src -value "$path$filename"\
+					-leftSide $name\
+					-rightSide FORM\
+					-horizontalScrollBar TRUE\
+					-columns 30]
+	VtShow $temp1
+}
+
+#*******************
+# quitCB -- packup and close application
+#*******************
+#
+proc quitCB {cbs} { 
+		   VtClose
+		   exit 0
+}
+
+#*******************
+# proc execlpCB called from printCB
+#*******************
+#
+proc execlpCB {cbs} {
+	global temp5 temp1 temp2 temp3 temp4 form
+	set command /usr/bin/lp
+	set text [VtGetValues $temp5 -value]
+	lappend command -n $text
+	set status [VtGetValues $temp3 -value]
+	if { $status != "0" } {
+		set text [VtGetValues $temp4 -value]
+		lappend command -t
+		lappend command $text
+	}
+	set filename [VtGetValues $temp2 -value]
+	lappend command $filename
+	VtDestroyDialog $temp1
+	set status [catch {eval exec $command } output]
+	if { $status != "0" } {
+		set errordlg [VtErrorDialog $form.errordlg -message $output]
+		VtShow $errordlg
+	} else {
+		set mesgdlg [VtInformationDialog $form.mesgdlg\
+					-message "$output"]
+		VtShow $mesgdlg
+		}
+}
+
+#*******************
+# proc textboxCB called from togglebutton temp3 in printCB
+#*******************
+#
+proc textboxCB {cbs} {
+	global temp3 temp4
+	set choice [VtGetValues $temp3 -value] 
+	if { $choice != 1 } {
+		VtSetSensitive $temp4 FALSE
+	} else {
+		VtSetSensitive $temp4 TRUE
+		}
+}
+
+#********************
+# printCB called from Print option in process menu
+#********************
+#
+proc printCB {cbs} {
+	global temp1 temp2 temp3 temp4 temp5 form
+	set temp1 [VtFormDialog $form.temp1\
+				-title "Print"\
+				-ok\
+				-okLabel "Print"\
+				-okCallback execlpCB\
+				-cancel\
+				-cancelCallback cancelCB]
+	set path [getPath]
+	set filename [getFile]
+	set temp2 [VtText $temp1.temp2\
+			-value "$path$filename"\
+			-horizontalScrollBar TRUE\
+			-columns 30\
+			-rightSide FORM]
+	set temp3 [VtToggleButton $temp1.temp3\
+				-label "Print file with title"\
+				-callback textboxCB\
+				-set FALSE]
+	set temp4 [VtText $temp1.temp4 -rightSide FORM]
+	set lbl [VtLabel $temp1.lbl \
+				-label "Number of copies "]
+	set temp5 [VtText $temp1.temp5 -value 1\
+					-leftSide $lbl\
+					-topSide $temp4\
+					-columns 2]
+	VtSetSensitive $temp4 FALSE
+	VtShow $temp1
+}
+
+proc cancelpCB {cbs} {
+	global form
+	set status [catch {exec prnman} error]
+	if { $status != "0" } {
+		set errord [VtErrorDialog $form.errord -message $error]
+		VtShow $errord
+	}
+}
+
+proc processCB {cbs} {
+	global form
+	set status [catch {exec procmanager} error]
+	if { $status != "0" } {
+		set errord [VtErrorDialog $form.errord -message $error]
+		VtShow $errord
+	}
+}
+
+#********************
+# proc unixCB from Shell option of process menu (pm2)
+#********************
+proc unixCB {cbs} {
+	catch {exec scoterm &}
+}
+
+#********************
+# callback from process pulldown menu. execute dos to get dos window
+#********************
+#
+proc dosCB {cbs} {
+	catch {exec dos &}
+}
+
+#********************
+# callback from temp1 formdialog of ccCB
+#********************
+#
+proc execccCB {cbs} {
+	global form temp1 temp2 temp3 temp4 temp5 dlist
+	set filename [VtGetValues $temp2 -value]
+	set status [VtGetValues $temp4 -value]
+	if { $status != "0" } {
+		catch {exec scoedit $filename &}
+	}
+	set status [VtGetValues $temp3 -value]
+	set binfile [VtGetValues $temp5 -value]
+	if { $status != "0" } {
+		catch {exec cc $filename 2> err.cc &}
+		set msg "Running cc in background\n
+			 Errors will be sent to file err.cc"                        
+		set infod [VtInformationDialog $form.infod\
+						-message $msg]
+		VtShow $infod
+	} else {
+		set mesg "Compiling..."
+		set msgd [VtFormDialog $form.msgd \
+					-title "Message"\
+					-wmDecoration {BORDER TITLE}]
+		set label [VtLabel $msgd.label -label $mesg]
+		VtShow $msgd
+		set status [catch {exec cc $filename} output]
+		if { $status != "0" } {
+			set temp1 [VtFormDialog $form.temp1\
+						-title "Compilation result"\
+						-ok\
+						-okCallback cancelCB]
+			VtLabel $temp1.label -label $output
+			VtShow $temp1
+		} else {
+			VtDestroyDialog $msgd
+			set mesg "Compilation complete"
+			set msgd [VtInformationDialog $form.msgd \
+					-message $mesg]
+			VtShow $msgd
+			catch {exec mv a.out $binfile}
+			VtDrawnListDeleteItem $dlist -all
+			drawnListAddItem $dlist
+			}
+	} 
+	VtDestroyDialog $temp1
+}
+	
+#********************
+# callback from C compiler option of process pulldown menu
+#********************
+#
+proc ccCB {cbs} {
+	global form temp1 temp2 temp3 temp4 temp5
+	set temp1 [VtFormDialog $form.temp1\
+				-title "C Compiler"\
+				-ok\
+				-okCallback execccCB\
+				-cancel\
+				-cancelCallback cancelCB]
+	set path [getPath]
+	set filename [getFile]
+	set temp2 [VtText $temp1.temp2\
+				-value "$path$filename"\
+				-columns 30\
+				-horizontalScrollBar TRUE\
+				-rightSide FORM]
+	set temp3 [VtToggleButton $temp1.temp3\
+				-label "Compile in background"]
+	set temp4 [VtToggleButton $temp1.temp4\
+				-label "Open file in Edit"]
+	set lbl [VtLabel $temp1.lbl -label "Name of executable"]
+	lappend name "$filename.bin"
+	set temp5 [VtText $temp1.temp5\
+				-value "$path$name"\
+				-leftSide FORM\
+				-rightSide FORM\
+				-horizontalScrollBar TRUE]
+	VtShow $temp1
+}
+
+proc formatCB {cbs} {
+	global form
+	set status [catch {exec vtformat &} error]
+	if { $status != "0" } {
+		set errord [VtErrorDialog $form.errord -message $error]
+		VtShow $errord
+	}
+}
+proc dupdCB {cbs} {
+	global form
+	set status [catch {exec vtdupd &} error]
+	if { $status != "0" } {
+		set errord [VtErrorDialog $form.errord -message $error]
+		VtShow $errord
+	}
+}
+proc execComCB {cbs} {
+	global form temp1 temp2
+	set command [VtGetValues $temp2 -value]
+	set status [catch {eval exec $command } output]
+	VtDestroyDialog $temp1
+
+	set temp1 [VtFormDialog $form.temp1\
+				-title "Result"\
+				-ok\
+				-okCallback cancelCB]
+	set textb [VtText $temp1.textb -value $output\
+				-verticalScrollBar TRUE\
+				-leftSide FORM\
+				-rightSide FORM\
+				-columns 70\
+				-rows 25\
+				-horizontalScrollBar TRUE\
+				-readOnly]
+	VtShow $temp1
+}
+		
+proc commandCB {cbs} {
+	global form temp1 temp2
+	set temp1 [VtFormDialog $form.temp1\
+				-title "Command Line"\
+				-ok\
+				-okCallback execComCB\
+				-cancel\
+				-cancelCallback cancelCB]
+	set temp2 [VtText $temp1.temp2 \
+				-value " "\
+				-columns 50\
+				-horizontalScrollBar TRUE]
+	VtShow $temp1
+}
+
+#********************
+# callback from accessories pulldown menu to execute scopaint
+#********************
+#
+proc paintCB {cbs} {
+	catch {exec scopaint &}
+}
+
+#********************
+# chdirCB callback from tool1 toolbar icon to change to selected directory
+#********************
+#
+proc chdirCB {cbs} {
+	global dlist form
+	set parentdialog [keylget cbs dialog]
+	set filename [getFile]
+	set llist [exec file $filename]
+	set filetype [lindex $llist 1 ]
+	if { $filetype != "directory" } {
+		set infod [VtInformationDialog  $parentdialog.infod\
+				-message "$filename: Not a directory"\
+				-ok]
+		VtShow $infod
+	} else {
+		set status [catch {cd $filename} output]
+		if { $status != "0" } {
+			set errord [VtErrorDialog $form.errord -message $output]
+			VtShow $errord
+		}
+		VtDrawnListDeleteItem $dlist -all
+		drawnListAddItem $dlist
+		VtSetFocus $dlist
+		}
+}
+
+proc dateCB {cbs} {
+	global form
+	set status [catch {exec vtdate &} error]
+	if { $status != "0" } {
+		set errord [VtErrorDialog $form.errord -message $error]
+		VtShow $errord
+	}
+}
+	
+#********************
+# CronBrowserCB callback procedure invoked when the cronbrowser
+# tool is activated from tools menu.
+#********************
+#
+proc cronBrowserCB {cbs} {
+	global form
+	set status [catch {exec /usr/group2/group1/cbrowser} error]
+	if { $status != "0" } {
+		set errord [VtErrorDialog $form.errord\ 
+						-message $error]
+		VtShow $errord
+	}
+}
+
+#********************
+# FindToolCB callback proc executes the findtool program
+#********************
+#
+proc findToolCB {cbs} {
+	global form
+	set status [catch {exec /usr/group2/group1/findtool} error]
+	if { $status != "0" } {
+		set errord [VtErrorDialog $form.errord\
+						-message $error]
+		VtShow $errord
+	}
+}
+
+#********************
+# informCB callback procedure from help.about menu option
+#********************
+#
+
+proc informCB {cbs} {   
+	global form
+	set msg "EXPLORER: A multipurpose utility package\n
+			in Visual TCL. Check it out."
+	set info [VtInformationDialog  $form.infod\
+			-message $msg \
+			-ok]
+			
+	VtShow $info
+}
+
+#********************
+# dirBrowseCB callback procedure - procedure executed when
+# the drawnlist is activated . The selected item is scrutinized to
+# identify if it is an up_arrow icon. If it is then the parent
+# directory is entered and the listing accordingly changed. 
+#********************
+#
+proc dirBrowseCB {cbs} {
+	global textbox
+	set parentdialog [keylget cbs widget]
+	set item [VtDrawnListGetSelectedItem $parentdialog ]
+	set filerec [VtDrawnListGetItem $parentdialog -position $item ]
+	set splitrec [split $filerec " "]
+
+# display filename of selected item in drawnlist in the textbox above it
+#
+	set splitfilename [lindex $splitrec 1]
+	set len [clength $splitfilename]
+	set decrlen [ expr $len - 1 ]
+	set filename [csubstr $splitfilename 0 $decrlen]
+	set path [getPath]
+	VtSetValues $textbox -value "$path$filename"
+# get icon information
+#
+	set split_icon [lindex $splitrec 0]
+	set len_split_icon [clength $split_icon]
+	set iconnum [csubstr $split_icon 1 $len_split_icon]
+
+# check icon number and move along directory tree 
+#  
+	if { $iconnum < 1 } {
+		cd ..
+		VtDrawnListDeleteItem $parentdialog -all
+		drawnListAddItem $parentdialog
+	}                
+}
+
+#*********************
+# procedure to inform user of an unimplemented menu item.
+#*********************
+#
+proc messageCB {cbs} {
+	global form
+	set mesgdialog [VtInformationDialog $form.mesg\
+			-message "This option is currently not implemented"\
+			-ok]
+	VtShow $mesgdialog
+}
+proc calenderCB {cbs} {
+	catch {exec scocal &}
+	}
+proc timeCB {cbs} {
+	exec xclock
+	}
+#********************
+# BUILDING THE MAIN FORM 
+#********************
+#
+set app [VtOpen myprog]
+
+set form [VtFormDialog $app.mainform -title EXPLORER]
+set menubar [WsMenuBar $form.menubar]
+
+set pm1 [WsPulldown $menubar.filemenu -label "File"\
+				      -mnemonic F]
+
+
+set edit [WsPushButton $pm1.edit -label "Edit"\
+				 -mnemonic E \
+				 -MOTIF_callback editCB\
+				 -CHARM_callback callviCB]]
+
+set run [WsPushButton $pm1.run -label "Run"\
+			       -mnemonic R\
+			       -callback runCB ]
+
+set copy [WsPushButton $pm1.copy -label "Copy..."\
+				 -mnemonic C\
+				 -callback copyCB ]
+
+set move [WsPushButton $pm1.move -label "Move..."\
+				 -mnemonic M\
+				 -callback moveCB ]
+
+set rename [WsPushButton $pm1.rename -label "Rename..."\
+				     -mnemonic n\
+				     -callback renameCB ] 
+
+set delete [WsPushButton $pm1.delete -label "Delete"\
+				     -mnemonic D\
+				     -callback deleteCB ]
+
+set perm [WsPushButton $pm1.perm -label "Permissions..."\
+				 -mnemonic P\
+				 -callback permCB ]
+
+set cat [WsPushButton $pm1.cat -label "Concatenate..."\
+			       -mnemonic o\
+			       -callback catCB ]
+set sep1 [VtSeparator $pm1.sep1\
+				-horizontal]
+set md [WsPushButton $pm1.md -label "Create Directory..."\
+				 -mnemonic t\
+				 -callback mkdirCB ]
+
+set rd [WsPushButton $pm1.rd -label "Remove Directory..."\
+				-mnemonic v\
+				-callback rmdirCB ]
+
+set sep2 [VtSeparator $pm1.sep2\
+				-horizontal]
+set home [WsPushButton $pm1.home -label "Go Home"\
+				 -mnemonic H\
+				 -callback homeCB ]
+
+set exit [WsPushButton $pm1.exit -label "Exit"\
+				 -mnemonic x\
+				 -callback quitCB ]
+				
+set pm2 [WsPulldown $menubar.process -label "Process"\
+				     -mnemonic P]
+
+set print [WsPushButton $pm2.print -label "Print File "\
+				   -mnemonic P\
+				   -callback printCB ]
+
+set cancelp [WsPushButton $pm2.cancelp -label "Cancel Print Job..."\
+				       -mnemonic C\
+				       -callback cancelpCB ]
+set sep3 [VtSeparator $pm2.sep3 -horizontal]
+
+set pid [WsPushButton $pm2.pid -label "Process ID"\
+			       -mnemonic I\
+			       -callback processCB ]
+
+set sep4 [VtSeparator $pm2.sep4 -horizontal]
+
+set remind [WsPushButton $pm2.remind -label "Reminders..."\
+				     -mnemonic e\
+				     -callback messageCB ]
+
+set shell [WsPushButton $pm2.shell -label "UNIX Shell"\
+				   -mnemonic U\
+				   -callback unixCB ]
+
+set dos [WsPushButton $pm2.dos -label "DOS Merge"\
+				   -mnemonic D\
+				   -callback dosCB ]
+
+set sep5 [VtSeparator $pm2.sep5 -horizontal]
+set cc [WsPushButton $pm2.cc -label "C Compiler"\
+			     -mnemonic C\
+			     -callback ccCB]
+
+set pm3 [WsPulldown $menubar.media -label "Media"\
+				   -mnemonic M ]
+
+set copyd [WsPushButton $pm3.copyd -label "Copy Disk..."\
+				   -mnemonic D\
+				   -callback dupdCB ]
+
+set backup [WsPushButton $pm3.backup -label "Backup..."\
+				     -mnemonic B\
+				     -callback messageCB ]
+
+set formatf [WsPushButton $pm3.formatf -label "Format Floppy..."\
+				       -mnemonic F\
+				       -callback formatCB ]
+
+set mount [WsPushButton $pm3.mount -label "Mount File System..."\
+				   -mnemonic M\
+				   -callback messageCB ]
+
+set pm4 [WsPulldown $menubar.tools -label "Tools"\
+				   -mnemonic T ]
+
+set search [WsPushButton $pm4.search -label "Search File..."\
+				     -mnemonic S\
+				     -callback findToolCB ]
+
+set cmd [WsPushButton $pm4.cmd -label "Command Line..."\
+			       -mnemonic C\
+			       -callback commandCB ]
+
+set cron [WsPushButton $pm4.cron -label "Cron Browser"\
+				 -mnemonic r\
+				 -callback cronBrowserCB]
+
+set pm5 [WsPulldown $menubar.accessories -label "Accessories"\
+					 -mnemonic A ]
+
+set cal [WsPushButton $pm5.cal -label "Calendar..."\
+			       -mnemonic C\
+			       -callback calenderCB ]
+
+set date [WsPushButton $pm5.date -label "Date"\
+				 -mnemonic D\
+				 -callback dateCB ]
+
+set time [WsPushButton $pm5.time -label "Time"\
+				 -mnemonic T\
+				 -callback timeCB ]
+
+set paint [WsPushButton $pm5.paint -label "Paint"\
+				-mnemonic P\
+				-callback paintCB]
+set pm6 [WsPulldown $menubar.info -label "Help"\
+				  -mnemonic H ]
+
+set about [WsPushButton $pm6.about -label "About"\
+				   -mnemonic A\
+				   -callback informCB ]
+
+#*******************
+#  TOOLBAR with icons
+#  pixmap option: The icon to display on pushbutton
+#  armedPixmap option: The icon to display when button is pressed
+#*******************
+#
+set tool1 [VtPushButton $form.tl1 -pixmap smalldir.cpx \
+				  -armedPixmap runfile.cpx \
+				  -callback chdirCB ]
+
+set tool2 [VtPushButton $form.tl2 -pixmap execfile.cpx \
+				  -topSide $menubar \
+				  -leftOffset 0 \
+				  -leftSide $tool1 \
+				  -callback execCB ]
+
+set tool3 [VtPushButton $form.tl3 -pixmap edit.cpx \
+				  -topSide $menubar \
+				  -leftOffset 0 \
+				  -leftSide $tool2 \
+				  -MOTIF_callback quickeditCB\
+				  -CHARM_callback callviCB ]
+
+set tool4 [VtPushButton $form.tl4 -pixmap delfile.cpx \
+				  -topSide $menubar\
+				  -leftOffset 0\
+				  -leftSide $tool3\
+				  -callback deleteCB]
+
+set tool5 [VtPushButton $form.tl5 -pixmap permit.cpx\
+				  -topSide $menubar\
+				  -leftOffset 0\
+				  -leftSide $tool4\
+				  -callback permCB]
+set toolsep [VtSeparator $form.toolsep\
+			-horizontal\
+			-leftSide FORM\
+			-rightSide FORM]
+set textbox [VtText $form.textbox -readOnly\
+				-rightSide FORM]
+set textsep [VtSeparator $form.textsep\
+			-horizontal\
+			-leftSide FORM\
+			-rightSide FORM]
+# make a drawnlist and populate it by the listing of the current directory 
+# by calling drawnListAddItem
+#
+set dlist [VtDrawnList $form.dlist\
+			-columns 35\
+			-rows 12\
+			-iconList { smalarow.cpx smallfil.cpx \
+				       execfile.cpx smalldir.cpx }\
+			-formatList { {ICON 1 5 5} {STRING 30 3 3} }\
+			-horizontalScrollBar TRUE\
+			-callback dirBrowseCB\
+			-rightSide 50\
+			-bottomSide FORM]
+drawnListAddItem $dlist
+set vertSep [VtSeparator $form.vertSep \
+		 -vertical \
+		 -leftSide $dlist \
+		 -topSide $textsep\
+		 -bottomSide FORM]
+
+#*******************
+# checking for the logname to desensitize options
+#*******************
+#
+set logn [exec logname]
+if { $logn != "root" } {
+		VtSetSensitive $cron FALSE
+		VtSetSensitive $remind FALSE
+		VtSetSensitive $mount FALSE
+		VtSetSensitive $backup FALSE
+		}
+VtShow $form
+VtMainLoop

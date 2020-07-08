@@ -1,0 +1,155 @@
+# The Find Tool
+# procedure called when ok button is pressed
+#
+proc okCB { cbs }  {
+# display a busy mouse cursor
+#        
+	VtLock
+	global start string type mount okButton cancelButton output
+# gray out (desensitize) the ok and cancel buttons till the find command 
+# has been executed
+#        
+	VtSetSensitive $okButton FALSE
+	VtSetSensitive $cancelButton FAlSE
+# set the path to the executable of find 
+#        
+	set command "/bin/find"
+# Append path from where find begins the search, to the command line
+#        
+	lappend command [VtGetValues $start  -value]
+# append the name of file to search for to the command line
+#        
+	lappend command -name [VtGetValues $string -value]
+# add the option for type of file to the command line of find
+# if object is a file then append -type f
+# if object is a directory file append -type d
+#        
+	switch [VtListGetSelectedItem $type -byItemList]   {
+		Any { }
+		File { lappend command "-type" "f"}
+		Directory { lappend command "-type" "d"}
+	}
+# append -mount if find should be made by mounting all filesystems
+#        
+	switch [VtGetValues $mount -value]   {
+		0 { }
+		1 { lappend command "-mount"}
+	}
+# append option -print to display result on display
+#        
+	lappend command -print
+# eval and catch are control commands
+# excecute the find command and assign the output generated to the
+# handle filelist . send any errors to null device
+#        
+	catch { eval exec $command 2>/dev/null } filelist
+# display ouput in the output dialog box
+#        
+	VtSetValues $output -value $filelist
+# activate the ok and cancel buttons once again
+#        
+	VtSetSensitive $okButton TRUE
+	VtSetSensitive $cancelButton TRUE
+# Unbusy the mouse pointer
+#        
+	VtUnLock
+}
+# proc okCB ends
+#
+# Call back to disable the ok button till some text is enetered in the
+#  text box of  the dialog box used to read filename
+#
+proc stringCB  { cbs }   {
+	global okButton
+# get text entered in the text box
+#        
+	set stringvalue [ keylget cbs value]
+# if the text box is blank keep ok button desensitized
+#        
+	if { "$stringvalue" != "" } {
+		VtSetSensitive $okButton TRUE
+		}\
+	else {
+		VtSetSensitive $okButton FALSE
+		}
+	}
+# end proc stringCB
+# establish connection with the widget server
+#
+set applet [VtOpen find]
+# Create the main form-dialog box and other dialog boxes
+#
+set mainform  [VtFormDialog $applet.mainform \
+		-title "Find Tool" \
+		-cancelLabel Close \
+		-cancelCallback VtClose\
+		-okCallback okCB ]
+# assign handle for the ok button of mainform
+#
+set okButton [VtGetValues $mainform -ok ]
+# similarly create handle to the cancel button of the mainform
+#
+set cancelButton [VtGetValues $mainform -cancel ]
+# create dialog box to enter the name of file and attach a label to it
+# also create a text entry box to entre filename
+#
+set stringform [ VtForm $mainform.stringform ]
+VtLabel $stringform.stringlabel  -label  "Name to search for"
+# call stringCB if anything is entered in the text box
+#
+set string [VtText $stringform.string \
+		-columns 32 \
+		-rows 1 \
+		-valueChangedCallback  stringCB ]
+# create a dialog box to read the path to search from in a text box
+# by default the text box contains the path to users home directory
+#
+set startform [VtForm $mainform.startform ]
+set start [VtText $startform.start \
+		-columns 32 \
+		-rows 1 \
+		-value "$env(HOME)" ]
+# $env(HOME) returns the users home directory
+# create a dialog box to select the type of file object
+# a drop down list gives the file object that can be selected
+#
+set  typeform [VtForm $mainform.typeform \
+		-leftSide $stringform \
+		-rightSide FORM \
+		-topSide FORM ]
+VtLabel $typeform.typelabel -label "Type of Object"
+set type [VtList $typeform.type \
+		-itemList {Any File Directory}\
+		-rightSide FORM ]
+# make a toggle button for presenting the option to mount file system
+#
+set mount [VtToggleButton $mainform.mount \
+		-label "Restrict search to \n \
+		single file system " \
+		-leftSide $startform ]
+# create a dialog box with a read only text box to display result
+#
+set outputform [VtForm $mainform.outputform \
+		-topSide $startform \
+		-rightSide FORM \
+		-bottomSide FORM ]
+VtLabel $outputform.label -label "Results"
+set output [VtText $outputform.output \
+		-readOnly\
+		-rows 8 \
+		-verticalScrollBar TRUE \
+		-rightSide FORM \
+		-bottomSide FORM ]
+# desensitize ok button of the main form 
+#
+VtSetSensitive $okButton FALSE
+# by default type of file is set to Any
+#
+VtListSelectItem $type -item Any
+# display the entire widget hierarchy
+#
+VtShow $mainform
+# hand control to the user 
+#
+VtMainLoop
+

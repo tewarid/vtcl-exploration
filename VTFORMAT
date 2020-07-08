@@ -1,0 +1,51 @@
+#!/bin/vtcl
+
+proc continueCB {cbs} {
+	global devlist continue box
+	set itemnum [VtListGetSelectedItem $devlist ]
+	set item [VtListGetItem $devlist -position $itemnum]
+	VtSetValues $box -value $item
+	VtSetSensitive $continue TRUE
+}
+
+proc execformatCB {cbs} {
+	global formatform box
+	set devname [VtGetValues $box -value]
+	set path "/dev/"
+	set status [catch {exec format -f "$path$devname"} err]
+	if { $status != "0" } {
+		set errd [VtErrorDialog $formatform.errd -message $err]
+		VtShow $errd
+	}
+}        
+set app [VtOpen vtformat ]
+set formatform [VtFormDialog $app.formatform \
+			-title "Format"\
+			-ok\
+			-okLabel "Continue"\
+			-okCallback execformatCB\
+			-cancel\
+			-cancelCallback VtClose]
+
+VtLabel $formatform.label -label "Format Disk :"
+
+set box [VtText $formatform.box \
+			-value " "\
+			-horizontalScrollBar TRUE\
+			-columns 30]
+
+set fn [open "drives.cfg" r]
+while { ! [eof $fn] } {
+	gets $fn record
+	lappend listname $record
+}
+close $fn
+
+set devlist [VtList $formatform.devlist \
+				-itemList $listname\
+				-callback continueCB\
+				-rightSide FORM]
+set continue [VtGetValues $formatform -ok]
+VtSetSensitive $continue FALSE
+VtShow $formatform
+VtMainLoop

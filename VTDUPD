@@ -1,0 +1,79 @@
+#!/bin/vtcl
+
+proc todiskCB {cbs} {
+	global ddform box
+		  set devname [VtGetValues $box -value]
+	set path "/dev/"
+	set drive "$path$devname"
+		  set status [catch {exec dd of=$drive if=vtdupd.tmp} err]
+		  if { $status != "0" } {
+					 set errd [VtErrorDialog $ddform.errd -message $err]
+					 VtShow $errd
+		  }
+	catch { exec rm vtdupd.tmp}
+}  
+
+proc fromdiskCB {cbs} {
+	global ddform box
+		  set devname [VtGetValues $box -value]
+		  set path "/dev/"
+		  set drive "$path$devname"
+		  set status [catch {exec dd if=$drive of=vtdupd.tmp} err]
+		  if { $status != "0" } {
+					 set errd [VtErrorDialog $ddform.errd -message $err]
+					 VtShow $errd
+		  } else {
+				set msg "Enter destination disk"
+				set msgd [VtInformationDialog $ddform.msgd\
+					 -message $msg\
+					 -okCallback todiskCB]
+				VtShow $msgd
+		}
+}
+
+proc copyCB {cbs} {
+	global ddform box 
+	set msg "Enter source disk"
+	set msgd [VtInformationDialog $ddform.msgd\
+				 -message $msg\
+				 -okCallback fromdiskCB]
+	VtShow $msgd
+}
+
+proc listCB {cbs} {
+	global devlist box copyButton
+	set itemnum [VtListGetSelectedItem $devlist]
+		  set item [VtListGetItem $devlist -position $itemnum]
+		  VtSetValues $box -value $item
+		  VtSetSensitive $copyButton TRUE
+}
+
+set app [VtOpen copydisk]
+set ddform [VtFormDialog $app.ddform\
+								-title "Copy Disk"\
+								-ok\
+								-okCallback copyCB\
+								-okLabel Copy\
+								-cancel\
+								-cancelCallback VtClose]
+VtLabel $ddform.label -label "Copy disk in drive:"
+set box [VtText $ddform.box\
+								-value " "\
+								-horizontalScrollBar TRUE\
+								-columns 30]
+
+set fn [open "drives.cfg" r]
+while { ! [eof $fn] } {
+		  gets $fn record
+		  lappend listname $record
+}
+close $fn
+
+set devlist [VtList $ddform.devlist\
+								-itemList $listname\
+								-callback listCB\
+								-rightSide FORM]
+set copyButton [VtGetValues $ddform -ok]
+VtSetSensitive $copyButton FALSE
+VtShow $ddform
+VtMainLoop

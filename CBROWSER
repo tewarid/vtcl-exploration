@@ -1,0 +1,100 @@
+proc GetCronRecordList {filename} {
+#should check to see if open fails here!
+#
+set fd [open $filename r]
+while { ![eof $fd] } {
+        if { [ gets $fd record ] > 0 } { 
+                #Skip commented records 
+                #
+                if { [cindex $record 0] != "#" } {
+                        lappend cronRecordList $record
+                        }
+        }
+}
+close $fd
+return $cronRecordList
+}
+
+# procedure to parse the cronrecordlist as obtained from
+# the proc `GetCronRecordList'. We split the record into 
+# an indexed records . These records are then integrated   
+# into a single record `parseCronRec' .
+#
+
+proc ParseCronRec {record} {
+        set itemList [split $record " "]
+        set scheduleFields [lrange $itemList 0 4]
+        set commandField [lrange $itemList 5 end]
+        keylset parsedCronRec MINUTE [lindex $scheduleFields 0]
+        keylset parsedCronRec HOUR [lindex $scheduleFields 1]
+        keylset parsedCronRec MONTHDAY [lindex $scheduleFields 2]
+        keylset parsedCronRec YEAR [lindex $scheduleFields 3]
+        keylset parsedCronRec WEEKDAY [lindex $scheduleFields 4]
+        keylset parsedCronRec COMMAND $commandField
+        return $parsedCronRec
+        }
+proc ShowDetailsCB {cbs} {
+        set parentDialog [keylget cbs dialog]
+        set dlog [VtFormDialog $parentDialog.dlog \
+                -title "Cron Record Details" \
+                -okCallback WxEndFormCB \
+                ]
+        set leftColumnW [VtRowColumn $dlog.left]
+        set rightColumnW [VtRowColumn $dlog.right \
+                -leftSide $leftColumnW \
+                -alignTop $leftColumnW \
+                -leftOffset 0 \
+                ]
+        set labelList [list Minute: Hour: "Day in Month:" \
+                Year: \
+                "Week Day:"]
+        foreach label $labelList {
+                VtLabel $leftColumnW.$label \
+                        -label $label \
+                        -labelRight
+                }
+        set fieldKeyList {MINUTE HOUR MONTHDAY YEAR WEEKDAY}
+        set userSelectedRecord [keylget cbs selectedItemList]
+        set cronList [ParseCronRec [lvarpop userSelectedRecord]]
+        foreach fieldKey $fieldKeyList {
+                VtLabel $rightColumnW.$fieldKey \
+                        -label [keylget cronList $fieldKey] \
+                        -labelLeft
+                }
+        VtText $dlog.command \
+                -below $leftColumnW \
+                -value [keylget cronList COMMAND] \
+                -columns 40 \
+                -horizontalScrollBar True \
+                -bottomSide FORM
+        VtShow $dlog
+}
+proc BuildMainDialog {dialog filename cronRecords} {
+        set titleLabelW [VtLabel $dialog.title \
+                        -label "Cron entries in $filename" \
+                        ]
+        set cronListW [VtList $dialog.cronList \
+                -itemList $cronRecords \
+                -rightSide FORM \
+                -bottomSide FORM \
+                -callback ShowDetailsCB \
+                ]
+        }
+
+
+#     THE MAIN APPLET
+#
+set appShell [VtOpen CronBrowser]
+set mainDialog [VtFormDialog $appShell.mainD \
+                -title "Cron Browser Program" \
+                -okLabel Exit \
+                -okCallback VtClose \
+                -wmCloseCallback VtClose \
+                ]
+set filename /usr/spool/cron/crontabs/root
+set cronRecords [ GetCronRecordList $filename]
+BuildMainDialog $mainDialog $filename $cronRecords
+VtShow $mainDialog
+VtMainLoop
+
+

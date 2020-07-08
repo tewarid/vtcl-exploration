@@ -1,0 +1,10 @@
+#!/bin/vtcl
+set app [VtOpen dateapp]
+set dateform [VtFormDialog $app.dateform \
+                        -title "Date"\
+                        -ok\
+                        -okCallback VtClose]
+set date [exec date "+%a, %d %h, %y"]
+set datebox [VtLabel $dateform.datebox -label $date]
+VtShow $dateform
+VtMainLoop

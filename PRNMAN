@@ -1,0 +1,90 @@
+#!/bin/vtcl
+
+set printJobList " "
+
+proc GetJobList {} {
+	set printStat [catch {exec lpstat > prnstat} ]
+	set printStat [open "prnstat" r]
+	while { ! [eof $printStat] } {
+		gets $printStat record
+		lappend printList $record
+	}
+	close $prnstat
+	catch {exec rm prnstat}
+	return $printList
+}
+
+#*************************************
+# User selected a process ID
+#*************************************
+#
+proc setCancelFocusCB {cbs} {
+	global pb1 statbar
+	VtSetSensitive $pb1 TRUE
+	VtSetValues $statbar -label "press Cancel Job button to cancel print job"
+}
+
+#*******************************************************
+# Time for action --User wants to kill selected process
+#*******************************************************
+#
+proc cancelJobCB {cbs} {
+	global printJobList statbar
+	VtSetValues $statbar -label "press to cancel the Print Job"
+	set UserSelectedItem [VtListGetSelectedItem $printJobList]
+	set SelectedRecord [VtListGetItem $printJobList\ 
+						-position $UserSelectedItem]
+	set UserSelectedProc [lindex $SelectedRecord 0]
+	set erstat [catch {exec cancel $UserSelectedProc} output]
+	if {  $erstat != "0" } {
+		set errormsg [VtErrorDialog $printJobList.err -message $output]
+		VtShow $errormsg
+	} 
+	VtClose
+}
+
+#*******************************************************
+#  Build the List widget and display the process status
+#*******************************************************
+#
+proc BuildPrintJobList {dialog printRecords} {
+	global printJobList 
+	set titleLabel [VtLabel $dialog.title\
+			-label "Print Jobs"\
+			]
+	set printJobList [VtList $dialog.printJobList\
+			-itemList $printRecords\
+			-rightSide FORM \
+			-callback setCancelFocusCB\
+			-columns 50\
+			-rows 5\
+			]
+}
+
+#*********************************************
+# Main Applet
+#*********************************************
+#
+
+set printman [VtOpen ProcManager]
+set mainDialog [VtFormDialog $printman.mainD \
+		-title "Print Manager"\
+		-cancel\
+		-cancelCallback VtClose\
+	       ]
+set printRecords [GetJobList]
+BuildPrintJobList $mainDialog $printRecords
+set pb1 [VtPushButton $mainDialog.pbt1 -label "CANCEL PRINT JOB"\
+				       -leftSide FORM \
+				       -rightSide FORM \
+				       -callback cancelJobCB ]
+set sep1 [VtSeparator $mainDialog.sepr1\
+			-horizontal\
+			-leftSide FORM\
+			-rightSide FORM]
+set statbar [VtLabel $mainDialog.statb\
+			-label "Select Item"\
+			]
+VtSetSensitive $pb1 FALSE
+VtShow $mainDialog
+VtMainLoop

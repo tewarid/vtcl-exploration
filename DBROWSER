@@ -1,0 +1,93 @@
+#!/bin/vtcl
+
+proc drawnListAddItem {parent} {
+	set lst [exec ls]
+	set maxl [llength $lst]
+	set longlist [exec l]
+	set reclist [split $longlist "\n"]
+	VtDrawnListAddItem $parent\
+		-formatList { {ICON 1 5} {STRING 30} }\
+		-fieldList [list 0 ".."]
+	set counter 0
+	while { [ expr ( $counter < $maxl ) ] }\
+	{                        
+		set item [lindex $lst $counter]
+# parse the long file listing to obtain the file permissions and to neglect
+# the 'total' field in it
+# 
+		set fieldcount [expr $counter + 1 ] 
+		set recfield [lindex $reclist $fieldcount]
+		set permission [lindex $recfield 0]
+
+# get file permissions and select suitable icon
+#
+		set dirperm [csubstr $permission 0 1]
+		if { $dirperm != "d" } {
+			set execperm [csubstr $permission 3 1]
+			if { $execperm != "x" } {
+				set iconum 1
+			} else {
+			set iconum 2
+				}
+		} else { 
+			set iconum 3
+			}
+
+		VtDrawnListAddItem $parent\
+			-formatList { {ICON 1 5} {STRING 30} }\
+			-fieldList [ list $iconum  $item ]
+		set counter [incr counter]
+	}
+
+}
+proc fileopenCB {cbs} {
+	set parentdialog [keylget cbs widget]
+	set item [VtDrawnListGetSelectedItem $parentdialog ]
+	set filerec [VtDrawnListGetItem $parentdialog -position $item ]
+	set recfield [split $filerec " "]
+	set filenamefield [lindex $recfield 1]
+	set len [clength $filenamefield]
+	set decrlen [ expr $len1 - 1 ]
+	set filename [csubstr $filenamefiled 0 $decrlen]
+	set pathname [exec pwd]
+
+	set iconfield [lindex $filefield 0]
+	set iconfieldlen [clength $name3]
+	set iconnum [csubstr $iconfield 1 iconfieldlen]
+
+	if { $iconnum < 1 } {
+		cd ..
+		VtDrawnListDeleteItem $parentdialog -all
+		drawnListAddItem $parentdialog
+		
+	} else { 
+		set llist [exec file $filename]
+		set filetype [lindex $llist 1 ]
+		if { $filetype != "directory" } {
+			exec "$pathname/$filename"
+		} else {
+			cd $filename
+			VtDrawnListDeleteItem $parentdialog -all
+			drawnListAddItem $parentdialog
+			}
+}               
+       
+}
+
+set app [VtOpen drawnlist]
+set form [VtFormDialog $app.mainform\
+			-title "EXPLORER"\
+			-okCallback VtClose]
+set dlist [VtDrawnList $form.dlist\
+			-columns 30\
+			-rows 10\
+			-iconList { up_arrow.px file_r_c.px bin_r_c.px dir_rx_c.px}\
+			-formatList { {ICON 1 5 5} {STRING 30 3 3} }\
+			-horizontalScrollBar TRUE\
+			-selection MULTIPLE\
+			-bottomSide FORM\
+			-rightSide 50 \
+			-callback fileopenCB ]
+drawnListAddItem $dlist
+VtShow $form
+VtMainLoop

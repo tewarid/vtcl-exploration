@@ -1,0 +1,92 @@
+#!/bin/vtcl
+set procList " "
+
+proc GetProcList {} {
+	global procList
+	set procStat [exec ps > processstat]
+	set procStat [open "processstat" r]
+	gets $procStat record
+	while { ! [eof $procStat] } {
+		gets $procStat record
+		lappend processList $record
+	}
+	lvarpop processList "end"
+	lvarpop processList "end"
+	close $procstat
+	catch {exec rm processstat}
+	return $processList
+}
+
+#*************************************
+# User selected a process ID
+#*************************************
+#
+proc setKillFocusCB {cbs} {
+	global pb1 statbar
+	VtSetSensitive $pb1 TRUE
+	VtSetValues $statbar -label "press Kill button to terminate process"
+}
+
+#*******************************************************
+# Time for action --User wants to kill selected process
+#*******************************************************
+#
+proc killProcessCB {cbs} {
+	global procList statbar
+	VtSetValues $statbar -label "killing process.. "
+	set UserSelectedItem [VtListGetSelectedItem $procList]
+	set SelectedRecord [VtListGetItem $procList -position $UserSelectedItem]
+	set UserSelectedProc [lindex $SelectedRecord 0]
+	set erstat [catch {exec kill -9 $UserSelectedProc} err ]
+	if {  $erstat != "0" } {
+		set errormsg [VtErrorDialog $procList.Cancelerr -message $err]
+		VtShow $errormsg
+	}
+}
+
+#*******************************************************
+#  Build the List widget and display the process status
+#*******************************************************
+#
+proc BuildProcList {dialog procRecords} {
+	global procList
+	set titleLabel [VtLabel $dialog.title\
+			-label "  PID    TTY     TIME       COMMAND"\
+			]
+	set procList [VtList $dialog.procList\
+			-itemList $procRecords\
+			-rightSide FORM \
+			-callback setKillFocusCB\
+			-columns 50\
+			-rows 5\
+			]
+	set temp $procList
+       }
+
+#*********************************************
+# Main Applet
+#*********************************************
+#
+
+set procman [VtOpen ProcManager]
+set mainDialog [VtFormDialog $procman.mainD \
+		-title "Process Manager" \
+		-okLabel Exit \
+		-okCallback VtClose \
+		]
+set procRecords [GetProcList]
+BuildProcList $mainDialog $procRecords
+set pb1 [VtPushButton $mainDialog.pbt1 -label "KILL PROCESS"\
+				       -leftSide FORM \
+				       -rightSide FORM \
+				       -callback killProcessCB ]
+set sep1 [VtSeparator $mainDialog.sepr1\
+			-horizontal\
+			-leftSide FORM\
+			-rightSide FORM]
+set statbar [VtLabel $mainDialog.statb\
+			-label "Select Item"\
+			]
+VtSetSensitive $pb1 FALSE
+VtShow $mainDialog
+VtMainLoop
